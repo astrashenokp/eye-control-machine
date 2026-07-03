@@ -42,9 +42,17 @@ pytest tests/
   version — nothing physical moves yet, it just prints/shows what the
   command *would* be.
 
+## Web 3D model
+
+[`web/`](web/) is a browser-only version of the same loop: webcam + MediaPipe
+running in-browser (WASM) drives a Three.js car around a 3D scene, no Python
+required. See [`web/README.md`](web/README.md) to run it. This is the "drive
+a virtual model first" step before wiring up real hardware.
+
 ## Roadmap
 
 - [x] Software-only gaze -> command loop (this repo)
+- [x] Browser-based 3D model you can drive with your eyes (`web/`)
 - [ ] Send `DriveCommand` over serial to a microcontroller (ESP32/Arduino)
       driving real motors on a small 2WD chassis
 - [ ] Swap the webcam overlay for a physical status LED / buzzer for the
