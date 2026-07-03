@@ -21,7 +21,11 @@ python -m http.server 8000
 ```
 
 Then open http://localhost:8000 and click the button to grant camera
-access.
+access. Before driving starts, a short calibration asks you to (1) open
+your eyes as wide as possible and (2) narrow them as much as possible
+without losing the pupil, each confirmed with a "Готово" button — this
+gives squint-to-speed each person's actual EAR range instead of assuming
+a fixed one.
 
 - **Manual (default)** — the car always drives, and heading follows your
   gaze directly: look left/right and it turns that way
@@ -29,8 +33,9 @@ access.
   own, ignoring gaze, so you can look around freely. 2 blinks again returns
   to manual.
 - **3 blinks** — emergency stop, from any mode. 2 blinks resumes in manual.
-- **Squint** (narrow your eyes short of a full blink) — speeds the car up,
-  the narrower the faster
+- **Squint** (narrow your eyes short of a full blink) — speeds the car up
+  (and sharpens turning to match), from 0.5x at your calibrated "wide open"
+  up to 3x at your calibrated "narrowest"
 
 ## Next step: the real thing
 
