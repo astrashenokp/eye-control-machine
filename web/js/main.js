@@ -29,18 +29,20 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1b1f2a);
 scene.fog = new THREE.Fog(0x1b1f2a, 20, 70);
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 200);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setSize(container.clientWidth, container.clientHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 container.appendChild(renderer.domElement);
 
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+function resizeToContainer() {
+  camera.aspect = container.clientWidth / container.clientHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+  renderer.setSize(container.clientWidth, container.clientHeight);
+}
+
+window.addEventListener("resize", resizeToContainer);
 
 const hemiLight = new THREE.HemisphereLight(0xbfd9ff, 0x2a2a2a, 1.1);
 scene.add(hemiLight);
@@ -144,7 +146,8 @@ function updateHud({ gazeX, gazeY, command, estop, noFace }) {
 
 // ---------- face scan overlay ----------
 
-const faceCamWrap = document.getElementById("face-cam-wrap");
+const faceCamWrap = document.getElementById("face-cam");
+const faceCamInner = document.getElementById("face-cam-inner");
 const faceCamLabel = document.getElementById("face-cam-label");
 const overlayCanvas = document.getElementById("face-overlay");
 const overlayCtx = overlayCanvas.getContext("2d");
@@ -230,6 +233,8 @@ async function setupWebcam() {
   video.play();
   overlayCanvas.width = video.videoWidth;
   overlayCanvas.height = video.videoHeight;
+  faceCamInner.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+  resizeToContainer();
 }
 
 function processFrame(nowMs) {
