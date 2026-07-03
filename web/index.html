@@ -3,9 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- this page changes often during development; tell browsers not to
+       cache the shell itself (the ?v=N below still cache-busts css/js) -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>eye-control-machine — 3D model</title>
   <!-- ?v=N cache-busts GitHub Pages' CDN -- bump on every css/js edit -->
-  <link rel="stylesheet" href="css/style.css?v=6" />
+  <link rel="stylesheet" href="css/style.css?v=7" />
   <script type="importmap">
     {
       "imports": {
@@ -37,6 +42,6 @@
 
   <button id="start-btn">Увімкнути камеру й керування очима</button>
 
-  <script type="module" src="js/main.js?v=6"></script>
+  <script type="module" src="js/main.js?v=7"></script>
 </body>
 </html>
