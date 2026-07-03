@@ -13,7 +13,7 @@ import {
   computeGazeY,
   eyeAspectRatio,
   gazeToTurn,
-} from "./logic.js";
+} from "./logic.js?v=2";
 
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
