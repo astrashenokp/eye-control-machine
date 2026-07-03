@@ -32,8 +32,7 @@ html, body {
   bottom: 0;
   left: 50%;
   aspect-ratio: 16 / 9;
-  /* mirror (selfie feel) + center horizontally within #face-cam */
-  transform: translateX(-50%) scaleX(-1);
+  transform: translateX(-50%); /* center horizontally within #face-cam */
 }
 
 #webcam {
