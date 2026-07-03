@@ -295,7 +295,9 @@ function processFrame(nowMs) {
 
       const blinkCount = blinkDetector.update(ear, timestampMs / 1000);
       if (blinkCount === 2) {
-        mode = mode === "autopilot" ? "manual" : "autopilot";
+        // from stopped, always resume in manual (gaze control) -- never
+        // straight into autopilot. Otherwise toggle manual <-> autopilot.
+        mode = mode === "stopped" ? "manual" : mode === "autopilot" ? "manual" : "autopilot";
       } else if (blinkCount >= 3) {
         mode = "stopped";
         estopFlashUntilMs = nowMs + 1500;
