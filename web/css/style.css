@@ -28,16 +28,29 @@ html, body {
 
 #face-cam-inner {
   position: absolute;
-  inset: 0;
-  transform: scaleX(-1); /* mirror, feels natural like a selfie cam */
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  aspect-ratio: 16 / 9;
+  /* mirror (selfie feel) + center horizontally within #face-cam */
+  transform: translateX(-50%) scaleX(-1);
 }
 
-#webcam,
+#webcam {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* fill without distorting proportions -- crop, don't stretch */
+}
+
 #face-overlay {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  /* canvas has no object-fit; main.js replicates the cover crop with a
+     manual transform so the mesh lines up with the visible video exactly */
 }
 
 #face-cam-label {
