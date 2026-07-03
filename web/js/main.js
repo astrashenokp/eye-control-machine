@@ -13,14 +13,14 @@ import {
   computeGazeY,
   eyeAspectRatio,
   gazeToTurn,
-} from "./logic.js?v=4";
+} from "./logic.js?v=5";
 
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 
 const SPEED_SCALE = 6.0; // world units per second while driving
-const TURN_RATE = 2.2; // radians per second at turn=1.0
+const TURN_RATE = 4.5; // radians per second at turn=1.0 -- fast enough that heading "snaps" toward gaze
 
 // ---------- Three.js scene ----------
 
@@ -94,24 +94,30 @@ scene.add(car);
 
 // ---------- vehicle state ----------
 //
-// Driving is blink-triggered, not gaze-triggered: 2 blinks = go, 3 blinks =
-// stop. That way looking around doesn't start/stop the car -- only turning
-// (steering left/right) follows gaze while driving.
+// Three modes:
+// - "manual" (default): always driving, heading follows gaze directly --
+//   look somewhere and the car turns/drives that way.
+// - "autopilot": 2 blinks from manual locks the heading and drives
+//   straight, ignoring gaze, so you can look around freely. 2 blinks again
+//   returns to manual.
+// - "stopped": 3 blinks, from any mode. Frozen in place. 2 blinks resumes
+//   in manual.
 
 let heading = 0; // radians
-let driving = false;
+let mode = "manual"; // "manual" | "autopilot" | "stopped"
 let estopFlashUntilMs = 0;
 
 function forwardVector() {
   return new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, heading, 0));
 }
 
-function updateVehicle(turn, dt) {
-  const effectiveTurn = driving ? turn : 0;
-  heading += effectiveTurn * TURN_RATE * dt;
+function updateVehicle(turn, dt, noFace) {
+  if (mode === "manual" && !noFace) {
+    heading += turn * TURN_RATE * dt;
+  }
   car.rotation.y = heading;
   const fwd = forwardVector();
-  const forwardSpeed = driving ? SPEED_SCALE : 0;
+  const forwardSpeed = mode === "stopped" || noFace ? 0 : SPEED_SCALE;
   car.position.addScaledVector(fwd, forwardSpeed * dt);
 
   const camOffset = fwd.clone().multiplyScalar(-6).add(new THREE.Vector3(0, 3.2, 0));
@@ -126,15 +132,16 @@ const hudLine1 = document.getElementById("hud-line1");
 const hudLine2 = document.getElementById("hud-line2");
 
 function describeCommand(turn) {
-  const base = driving ? "FORWARD" : "PARKED (2 моргання = вперед)";
-  if (turn > 0.05) return `${base} + LEFT`;
-  if (turn < -0.05) return `${base} + RIGHT`;
-  return base;
+  if (mode === "autopilot") return "AUTOPILOT (прямо, дивись куди хочеш)";
+  if (mode === "stopped") return "STOPPED (2 моргання = старт)";
+  if (turn > 0.05) return "MANUAL: LEFT";
+  if (turn < -0.05) return "MANUAL: RIGHT";
+  return "MANUAL: FORWARD";
 }
 
 function updateHud({ gazeX, gazeY, turn, noFace }, nowMs) {
   const flashingStop = nowMs < estopFlashUntilMs;
-  hud.classList.toggle("estop", flashingStop);
+  hud.classList.toggle("estop", flashingStop || mode === "stopped");
   hud.classList.toggle("no-face", noFace);
   faceCamWrap.classList.toggle("no-face", noFace);
   faceCamLabel.textContent = noFace ? "обличчя не знайдено" : "скан обличчя — очі відслідковуються";
@@ -290,9 +297,9 @@ function processFrame(nowMs) {
       const ear = eyeAspectRatio(lm[LEFT_EYE_TOP].y, lm[LEFT_EYE_BOTTOM].y, lm[LEFT_EYE_OUTER].x, lm[LEFT_EYE_INNER].x);
       const blinkCount = blinkDetector.update(ear, timestampMs / 1000);
       if (blinkCount === 2) {
-        driving = true;
+        mode = mode === "autopilot" ? "manual" : "autopilot";
       } else if (blinkCount >= 3) {
-        driving = false;
+        mode = "stopped";
         estopFlashUntilMs = nowMs + 1500;
       }
     } else {
@@ -300,7 +307,7 @@ function processFrame(nowMs) {
     }
   }
 
-  updateVehicle(turn, dt);
+  updateVehicle(turn, dt, noFace);
   updateHud({ gazeX, gazeY, turn, noFace }, nowMs);
 
   requestAnimationFrame(processFrame);
