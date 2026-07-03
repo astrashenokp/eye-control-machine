@@ -8,18 +8,18 @@ import {
   LEFT_IRIS_CENTER,
   RIGHT_EYE_OUTER,
   RIGHT_IRIS_CENTER,
-  DoubleBlinkDetector,
+  BlinkSequenceDetector,
   computeGazeX,
   computeGazeY,
   eyeAspectRatio,
-  gazeToCommand,
+  gazeToTurn,
 } from "./logic.js";
 
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 
-const SPEED_SCALE = 6.0; // world units per second at forward=GAZE_FORWARD_SPEED
+const SPEED_SCALE = 6.0; // world units per second while driving
 const TURN_RATE = 2.2; // radians per second at turn=1.0
 
 // ---------- Three.js scene ----------
@@ -93,21 +93,26 @@ for (const x of [-0.75, 0.75]) {
 scene.add(car);
 
 // ---------- vehicle state ----------
+//
+// Driving is blink-triggered, not gaze-triggered: 2 blinks = go, 3 blinks =
+// stop. That way looking around doesn't start/stop the car -- only turning
+// (steering left/right) follows gaze while driving.
 
 let heading = 0; // radians
-let emergencyStopped = false;
+let driving = false;
+let estopFlashUntilMs = 0;
 
 function forwardVector() {
   return new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, heading, 0));
 }
 
-function updateVehicle(command, dt) {
-  const effectiveForward = emergencyStopped ? 0 : command.forward;
-  const effectiveTurn = emergencyStopped ? 0 : command.turn;
+function updateVehicle(turn, dt) {
+  const effectiveTurn = driving ? turn : 0;
   heading += effectiveTurn * TURN_RATE * dt;
   car.rotation.y = heading;
   const fwd = forwardVector();
-  car.position.addScaledVector(fwd, (effectiveForward / 0.15) * SPEED_SCALE * dt);
+  const forwardSpeed = driving ? SPEED_SCALE : 0;
+  car.position.addScaledVector(fwd, forwardSpeed * dt);
 
   const camOffset = fwd.clone().multiplyScalar(-6).add(new THREE.Vector3(0, 3.2, 0));
   camera.position.lerp(car.position.clone().add(camOffset), 0.08);
@@ -120,15 +125,16 @@ const hud = document.getElementById("hud");
 const hudLine1 = document.getElementById("hud-line1");
 const hudLine2 = document.getElementById("hud-line2");
 
-function describeCommand(command) {
-  const base = command.forward > 0 ? "FORWARD" : "STOP";
-  if (command.turn > 0.05) return `${base} + LEFT`;
-  if (command.turn < -0.05) return `${base} + RIGHT`;
+function describeCommand(turn) {
+  const base = driving ? "FORWARD" : "PARKED (2 моргання = вперед)";
+  if (turn > 0.05) return `${base} + LEFT`;
+  if (turn < -0.05) return `${base} + RIGHT`;
   return base;
 }
 
-function updateHud({ gazeX, gazeY, command, estop, noFace }) {
-  hud.classList.toggle("estop", emergencyStopped);
+function updateHud({ gazeX, gazeY, turn, noFace }, nowMs) {
+  const flashingStop = nowMs < estopFlashUntilMs;
+  hud.classList.toggle("estop", flashingStop);
   hud.classList.toggle("no-face", noFace);
   faceCamWrap.classList.toggle("no-face", noFace);
   faceCamLabel.textContent = noFace ? "обличчя не знайдено" : "скан обличчя — очі відслідковуються";
@@ -140,14 +146,13 @@ function updateHud({ gazeX, gazeY, command, estop, noFace }) {
   }
 
   hudLine1.textContent = `gaze_x=${gazeX.toFixed(2)} gaze_y=${gazeY.toFixed(2)}`;
-  const label = emergencyStopped ? "EMERGENCY STOP (подвійне моргання -> відновити)" : describeCommand(command);
+  const label = flashingStop ? "EMERGENCY STOP (3 моргання)" : describeCommand(turn);
   hudLine2.textContent = `command: ${label}`;
 }
 
 // ---------- face scan overlay ----------
 
 const faceCamWrap = document.getElementById("face-cam");
-const faceCamInner = document.getElementById("face-cam-inner");
 const faceCamLabel = document.getElementById("face-cam-label");
 const overlayCanvas = document.getElementById("face-overlay");
 const overlayCtx = overlayCanvas.getContext("2d");
@@ -206,7 +211,7 @@ function drawFaceOverlay(faceLandmarksList) {
 const video = document.getElementById("webcam");
 const startBtn = document.getElementById("start-btn");
 
-const blinkDetector = new DoubleBlinkDetector();
+const blinkDetector = new BlinkSequenceDetector();
 let landmarker = null;
 let startTimeMs = 0;
 let lastFrameTime = performance.now();
@@ -233,7 +238,6 @@ async function setupWebcam() {
   video.play();
   overlayCanvas.width = video.videoWidth;
   overlayCanvas.height = video.videoHeight;
-  faceCamInner.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
   resizeToContainer();
 }
 
@@ -241,10 +245,9 @@ function processFrame(nowMs) {
   const dt = Math.min((nowMs - lastFrameTime) / 1000, 0.1);
   lastFrameTime = nowMs;
 
-  let command = { forward: 0, turn: 0 };
+  let turn = 0;
   let gazeX = 0.5;
   let gazeY = 0.5;
-  let estop = false;
   let noFace = true;
 
   if (landmarker && video.readyState >= 2) {
@@ -258,20 +261,23 @@ function processFrame(nowMs) {
 
       gazeX = computeGazeX(lm[LEFT_IRIS_CENTER].x, lm[RIGHT_IRIS_CENTER].x, lm[LEFT_EYE_OUTER].x, lm[RIGHT_EYE_OUTER].x);
       gazeY = computeGazeY(lm[LEFT_IRIS_CENTER].y, lm[LEFT_EYE_TOP].y, lm[LEFT_EYE_BOTTOM].y);
-      command = gazeToCommand(gazeX);
+      turn = gazeToTurn(gazeX);
 
       const ear = eyeAspectRatio(lm[LEFT_EYE_TOP].y, lm[LEFT_EYE_BOTTOM].y, lm[LEFT_EYE_OUTER].x, lm[LEFT_EYE_INNER].x);
-      estop = blinkDetector.update(ear, timestampMs / 1000);
-      if (estop) {
-        emergencyStopped = !emergencyStopped;
+      const blinkCount = blinkDetector.update(ear, timestampMs / 1000);
+      if (blinkCount === 2) {
+        driving = true;
+      } else if (blinkCount >= 3) {
+        driving = false;
+        estopFlashUntilMs = nowMs + 1500;
       }
     } else {
       blinkDetector.reset();
     }
   }
 
-  updateVehicle(command, dt);
-  updateHud({ gazeX, gazeY, command, estop, noFace });
+  updateVehicle(turn, dt);
+  updateHud({ gazeX, gazeY, turn, noFace }, nowMs);
 
   requestAnimationFrame(processFrame);
   renderer.render(scene, camera);
