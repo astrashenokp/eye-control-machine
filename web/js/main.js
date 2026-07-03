@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import {
-  EAR_BASELINE_DECAY,
   EAR_THRESHOLD,
   LEFT_EYE_BOTTOM,
   LEFT_EYE_INNER,
@@ -19,7 +18,7 @@ import {
   eyeAspectRatio,
   gazeToTurn,
   squintSpeedMultiplier,
-} from "./logic.js?v=12";
+} from "./logic.js?v=15";
 
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
@@ -118,7 +117,11 @@ scene.add(car);
 let heading = 0; // radians
 let mode = "manual"; // "manual" | "autopilot" | "stopped"
 let estopFlashUntilMs = 0;
-let openEarBaseline = EAR_THRESHOLD; // adapts up to the eye's actual "wide open" EAR, see squintSpeedMultiplier
+// Set by the startup calibration flow (see runCalibration) before driving
+// ever starts -- squintSpeedMultiplier uses these as its two reference
+// points instead of a fixed/assumed EAR range.
+let earOpenCalibrated = 0.3;
+let earSquintCalibrated = EAR_THRESHOLD * 1.1;
 
 function forwardVector() {
   return new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, heading, 0));
@@ -277,6 +280,61 @@ async function setupWebcam() {
 
 window.addEventListener("resize", resizeOverlayCanvas);
 
+// ---------- startup calibration ----------
+//
+// Squint-to-speed needs to know each person's actual EAR range (it varies
+// a lot by eye shape, camera angle and lighting), so before driving starts
+// we ask for two reference poses: eyes wide open, then as narrow as
+// possible without losing the pupil. squintSpeedMultiplier interpolates
+// between those two calibrated points instead of assuming fixed ones.
+
+const calibrationEl = document.getElementById("calibration");
+const calibrationText = document.getElementById("calibration-text");
+const calibrationBtn = document.getElementById("calibration-btn");
+
+let liveEar = null;
+let calibrationFrameId = null;
+
+function calibrationFrameLoop(nowMs) {
+  if (landmarker && video.readyState >= 2) {
+    const timestampMs = nowMs - startTimeMs;
+    const result = landmarker.detectForVideo(video, timestampMs);
+    drawFaceOverlay(result.faceLandmarks, video.videoWidth, video.videoHeight);
+    if (result.faceLandmarks && result.faceLandmarks.length > 0) {
+      const lm = result.faceLandmarks[0];
+      liveEar = eyeAspectRatio(lm[LEFT_EYE_TOP].y, lm[LEFT_EYE_BOTTOM].y, lm[LEFT_EYE_OUTER].x, lm[LEFT_EYE_INNER].x);
+    }
+  }
+  renderer.render(scene, camera);
+  calibrationFrameId = requestAnimationFrame(calibrationFrameLoop);
+}
+
+function waitForClick(button) {
+  return new Promise((resolve) => {
+    button.addEventListener("click", () => resolve(), { once: true });
+  });
+}
+
+async function runCalibration() {
+  calibrationEl.classList.remove("hidden");
+  calibrationFrameId = requestAnimationFrame(calibrationFrameLoop);
+
+  calibrationText.textContent = 'Розплющ очі максимально широко, тоді натисни "Готово"';
+  await waitForClick(calibrationBtn);
+  const earOpen = liveEar ?? earOpenCalibrated;
+
+  calibrationText.textContent =
+    'Тепер звузь очі максимально (зіниці мають лишатись видні, не заплющуй повністю), тоді натисни "Готово"';
+  await waitForClick(calibrationBtn);
+  const earSquint = liveEar ?? earSquintCalibrated;
+
+  cancelAnimationFrame(calibrationFrameId);
+  calibrationEl.classList.add("hidden");
+
+  earOpenCalibrated = earOpen;
+  earSquintCalibrated = earSquint;
+}
+
 function processFrame(nowMs) {
   const dt = Math.min((nowMs - lastFrameTime) / 1000, 0.1);
   lastFrameTime = nowMs;
@@ -301,8 +359,7 @@ function processFrame(nowMs) {
       turn = gazeToTurn(gazeX);
 
       const ear = eyeAspectRatio(lm[LEFT_EYE_TOP].y, lm[LEFT_EYE_BOTTOM].y, lm[LEFT_EYE_OUTER].x, lm[LEFT_EYE_INNER].x);
-      openEarBaseline = Math.max(ear, openEarBaseline * EAR_BASELINE_DECAY);
-      speedMult = squintSpeedMultiplier(ear, openEarBaseline);
+      speedMult = squintSpeedMultiplier(ear, earOpenCalibrated, earSquintCalibrated);
 
       const blinkCount = blinkDetector.update(ear, timestampMs / 1000);
       if (blinkCount === 2) {
@@ -333,6 +390,10 @@ startBtn.addEventListener("click", async () => {
     startTimeMs = performance.now();
     lastFrameTime = startTimeMs;
     startBtn.classList.add("hidden");
+
+    await runCalibration();
+
+    lastFrameTime = performance.now();
     requestAnimationFrame(processFrame);
   } catch (err) {
     console.error(err);
