@@ -13,7 +13,7 @@ import {
   computeGazeY,
   eyeAspectRatio,
   gazeToTurn,
-} from "./logic.js?v=2";
+} from "./logic.js?v=3";
 
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
@@ -168,12 +168,35 @@ function drawPupil(landmark, color) {
   overlayCtx.stroke();
 }
 
-function drawFaceOverlay(faceLandmarksList) {
+function resizeOverlayCanvas() {
+  overlayCanvas.width = overlayCanvas.clientWidth;
+  overlayCanvas.height = overlayCanvas.clientHeight;
+}
+
+// The <video> uses object-fit: cover (uniform scale + crop, no distortion),
+// but <canvas> has no object-fit -- so before drawing, replicate that same
+// crop as a 2D transform. DrawingUtils and drawPupil() both compute raw
+// coordinates as landmark * canvas.width/height; this transform maps that
+// convention onto the visible (cropped) video instead of the full frame.
+function applyCoverTransform(videoW, videoH) {
+  const boxW = overlayCanvas.width;
+  const boxH = overlayCanvas.height;
+  const scale = Math.max(boxW / videoW, boxH / videoH);
+  const drawW = videoW * scale;
+  const drawH = videoH * scale;
+  const offsetX = (boxW - drawW) / 2;
+  const offsetY = (boxH - drawH) / 2;
+  overlayCtx.setTransform(drawW / boxW, 0, 0, drawH / boxH, offsetX, offsetY);
+}
+
+function drawFaceOverlay(faceLandmarksList, videoW, videoH) {
+  overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
   if (!overlayCanvas.width || !overlayCanvas.height) return;
   overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
   if (!faceLandmarksList || faceLandmarksList.length === 0) return;
 
   if (!drawingUtils) drawingUtils = new DrawingUtils(overlayCtx);
+  applyCoverTransform(videoW, videoH);
 
   for (const landmarks of faceLandmarksList) {
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {
@@ -204,6 +227,8 @@ function drawFaceOverlay(faceLandmarksList) {
     drawPupil(landmarks[LEFT_IRIS_CENTER], "#ff4d4d");
     drawPupil(landmarks[RIGHT_IRIS_CENTER], "#ff4d4d");
   }
+
+  overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
 // ---------- webcam + MediaPipe ----------
@@ -228,7 +253,9 @@ async function setupLandmarker() {
 
 async function setupWebcam() {
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { width: { ideal: 960 }, height: { ideal: 720 } },
+    // wide-ish capture matches the display box's aspect ratio better, so
+    // the cover crop below doesn't have to cut away as much of the frame
+    video: { width: { ideal: 1280 }, height: { ideal: 720 } },
     audio: false,
   });
   video.srcObject = stream;
@@ -236,10 +263,11 @@ async function setupWebcam() {
     video.onloadedmetadata = () => resolve();
   });
   video.play();
-  overlayCanvas.width = video.videoWidth;
-  overlayCanvas.height = video.videoHeight;
+  resizeOverlayCanvas();
   resizeToContainer();
 }
+
+window.addEventListener("resize", resizeOverlayCanvas);
 
 function processFrame(nowMs) {
   const dt = Math.min((nowMs - lastFrameTime) / 1000, 0.1);
@@ -253,7 +281,7 @@ function processFrame(nowMs) {
   if (landmarker && video.readyState >= 2) {
     const timestampMs = nowMs - startTimeMs;
     const result = landmarker.detectForVideo(video, timestampMs);
-    drawFaceOverlay(result.faceLandmarks);
+    drawFaceOverlay(result.faceLandmarks, video.videoWidth, video.videoHeight);
 
     if (result.faceLandmarks && result.faceLandmarks.length > 0) {
       noFace = false;
