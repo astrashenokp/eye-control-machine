@@ -17,12 +17,12 @@ export const LEFT_EYE_TOP = 159;
 export const LEFT_EYE_BOTTOM = 145;
 
 export const GAZE_FORWARD_SPEED = 0.15;
-// Web-tuned turn sensitivity: much lower dead zone and higher gain than the
-// Python defaults (0.15 / 0.8) so a small eye movement is enough to reach
-// full turn -- you should never have to turn your head far enough to lose
-// sight of the screen.
-export const GAZE_TURN_ZONE = 0.004;
-export const GAZE_TURN_GAIN = 9.0;
+// Web-tuned turn sensitivity: lower dead zone and higher gain than the
+// Python defaults (0.15 / 0.8) so a full eye-only movement (without
+// turning your head) is enough to reach full turn, while smaller
+// movements still produce proportionally smaller turns.
+export const GAZE_TURN_ZONE = 0.01;
+export const GAZE_TURN_GAIN = 4.0;
 export const GAZE_MIN_EYE_SPAN = 0.01; // below this, eye-corner landmarks are too close to trust
 export const GAZE_TURN_MAX = 1.0; // hard clamp -- never return an unbounded turn command
 
@@ -49,9 +49,16 @@ export function computeGazeY(irisY, eyeTopY, eyeBottomY) {
 
 // Only the turn component is used by the web app -- forward motion is
 // blink-triggered (see BlinkSequenceDetector), not gaze-triggered.
+//
+// Sign is flipped from the Python version's (0.5 - gazeX): on the web,
+// browser camera frames come through already mirrored (selfie-style) on
+// most systems, which reverses which physical direction "gazeX > 0.5"
+// corresponds to. (gazeX - 0.5) matches gaze direction to turn direction
+// as verified against the deployed app -- flip back if you change how the
+// camera feed is captured/mirrored.
 export function gazeToTurn(gazeX) {
   const gazeCenterDist = Math.abs(gazeX - 0.5);
-  let turn = gazeCenterDist > GAZE_TURN_ZONE ? (0.5 - gazeX) * GAZE_TURN_GAIN : 0.0;
+  let turn = gazeCenterDist > GAZE_TURN_ZONE ? (gazeX - 0.5) * GAZE_TURN_GAIN : 0.0;
   turn = Math.max(-GAZE_TURN_MAX, Math.min(GAZE_TURN_MAX, turn));
   return turn;
 }
