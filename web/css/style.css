@@ -24,16 +24,11 @@ html, body {
   min-height: 0;
   background: #000;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 #face-cam-inner {
-  position: relative;
-  height: 100%;
-  /* aspect-ratio is set from JS once the real camera resolution is known */
-  aspect-ratio: 4 / 3;
+  position: absolute;
+  inset: 0;
   transform: scaleX(-1); /* mirror, feels natural like a selfie cam */
 }
 
