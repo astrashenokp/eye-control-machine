@@ -1,11 +1,11 @@
 # Web 3D model — eye-controlled
 
 Browser version of the eye-control loop: no Python, no install. A webcam
-feed drives a MediaPipe FaceLandmarker running in-browser (WASM), the exact
-same gaze math as [`src/eye_control/logic.py`](../src/eye_control/logic.py)
-(ported line-for-line in [`js/logic.js`](js/logic.js)) turns that into a
-`{forward, turn}` command, and a Three.js scene moves a little car around a
-grid accordingly. Double-blink toggles an emergency stop.
+feed drives a MediaPipe FaceLandmarker running in-browser (WASM). The gaze
+math started as a line-for-line port of
+[`src/eye_control/logic.py`](../src/eye_control/logic.py)
+([`js/logic.js`](js/logic.js)) but the control scheme has since diverged on
+purpose (see below) so looking around doesn't fight with driving.
 
 Three.js and `@mediapipe/tasks-vision` are loaded from CDN via an import
 map — no npm install, no build step.
@@ -21,8 +21,12 @@ python -m http.server 8000
 ```
 
 Then open http://localhost:8000 and click the button to grant camera
-access. Look center to drive forward, look left/right to turn, double-blink
-to stop (double-blink again to resume).
+access.
+
+- **2 blinks** — start driving forward
+- **3 blinks** — emergency stop
+- **Look left/right** — steer while driving (has no effect while parked, so
+  you can freely look around without accidentally moving the car)
 
 ## Next step: the real thing
 
