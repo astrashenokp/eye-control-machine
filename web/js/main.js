@@ -13,7 +13,7 @@ import {
   computeGazeY,
   eyeAspectRatio,
   gazeToTurn,
-} from "./logic.js?v=3";
+} from "./logic.js?v=4";
 
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
@@ -160,10 +160,10 @@ let drawingUtils = null;
 
 function drawPupil(landmark, color) {
   overlayCtx.beginPath();
-  overlayCtx.arc(landmark.x * overlayCanvas.width, landmark.y * overlayCanvas.height, 6, 0, Math.PI * 2);
+  overlayCtx.arc(landmark.x * overlayCanvas.width, landmark.y * overlayCanvas.height, 3, 0, Math.PI * 2);
   overlayCtx.fillStyle = color;
   overlayCtx.fill();
-  overlayCtx.lineWidth = 2;
+  overlayCtx.lineWidth = 1;
   overlayCtx.strokeStyle = "#ffffff";
   overlayCtx.stroke();
 }
@@ -199,10 +199,6 @@ function drawFaceOverlay(faceLandmarksList, videoW, videoH) {
   applyCoverTransform(videoW, videoH);
 
   for (const landmarks of faceLandmarksList) {
-    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {
-      color: "#30ff6340",
-      lineWidth: 0.5,
-    });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, {
       color: "#e8f0ff",
       lineWidth: 1.5,
