@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import { DrawingUtils, FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import {
   LEFT_EYE_BOTTOM,
   LEFT_EYE_INNER,
@@ -128,6 +128,8 @@ function describeCommand(command) {
 function updateHud({ gazeX, gazeY, command, estop, noFace }) {
   hud.classList.toggle("estop", emergencyStopped);
   hud.classList.toggle("no-face", noFace);
+  faceCamWrap.classList.toggle("no-face", noFace);
+  faceCamLabel.textContent = noFace ? "обличчя не знайдено" : "скан обличчя — очі відслідковуються";
 
   if (noFace) {
     hudLine1.textContent = "обличчя не знайдено";
@@ -138,6 +140,62 @@ function updateHud({ gazeX, gazeY, command, estop, noFace }) {
   hudLine1.textContent = `gaze_x=${gazeX.toFixed(2)} gaze_y=${gazeY.toFixed(2)}`;
   const label = emergencyStopped ? "EMERGENCY STOP (подвійне моргання -> відновити)" : describeCommand(command);
   hudLine2.textContent = `command: ${label}`;
+}
+
+// ---------- face scan overlay ----------
+
+const faceCamWrap = document.getElementById("face-cam-wrap");
+const faceCamLabel = document.getElementById("face-cam-label");
+const overlayCanvas = document.getElementById("face-overlay");
+const overlayCtx = overlayCanvas.getContext("2d");
+let drawingUtils = null;
+
+function drawPupil(landmark, color) {
+  overlayCtx.beginPath();
+  overlayCtx.arc(landmark.x * overlayCanvas.width, landmark.y * overlayCanvas.height, 6, 0, Math.PI * 2);
+  overlayCtx.fillStyle = color;
+  overlayCtx.fill();
+  overlayCtx.lineWidth = 2;
+  overlayCtx.strokeStyle = "#ffffff";
+  overlayCtx.stroke();
+}
+
+function drawFaceOverlay(faceLandmarksList) {
+  if (!overlayCanvas.width || !overlayCanvas.height) return;
+  overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+  if (!faceLandmarksList || faceLandmarksList.length === 0) return;
+
+  if (!drawingUtils) drawingUtils = new DrawingUtils(overlayCtx);
+
+  for (const landmarks of faceLandmarksList) {
+    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {
+      color: "#30ff6340",
+      lineWidth: 0.5,
+    });
+    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, {
+      color: "#e8f0ff",
+      lineWidth: 1.5,
+    });
+    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, { color: "#30ff30", lineWidth: 2 });
+    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW, {
+      color: "#30ff30",
+      lineWidth: 1.5,
+    });
+    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, { color: "#30ff30", lineWidth: 2 });
+    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, {
+      color: "#30ff30",
+      lineWidth: 1.5,
+    });
+    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, { color: "#ffd23f", lineWidth: 2 });
+    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, {
+      color: "#ffd23f",
+      lineWidth: 2,
+    });
+
+    // pupil centers, drawn extra large so they're unmistakable
+    drawPupil(landmarks[LEFT_IRIS_CENTER], "#ff4d4d");
+    drawPupil(landmarks[RIGHT_IRIS_CENTER], "#ff4d4d");
+  }
 }
 
 // ---------- webcam + MediaPipe ----------
@@ -162,7 +220,7 @@ async function setupLandmarker() {
 
 async function setupWebcam() {
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { width: 640, height: 480 },
+    video: { width: { ideal: 960 }, height: { ideal: 720 } },
     audio: false,
   });
   video.srcObject = stream;
@@ -170,6 +228,8 @@ async function setupWebcam() {
     video.onloadedmetadata = () => resolve();
   });
   video.play();
+  overlayCanvas.width = video.videoWidth;
+  overlayCanvas.height = video.videoHeight;
 }
 
 function processFrame(nowMs) {
@@ -185,6 +245,7 @@ function processFrame(nowMs) {
   if (landmarker && video.readyState >= 2) {
     const timestampMs = nowMs - startTimeMs;
     const result = landmarker.detectForVideo(video, timestampMs);
+    drawFaceOverlay(result.faceLandmarks);
 
     if (result.faceLandmarks && result.faceLandmarks.length > 0) {
       noFace = false;
