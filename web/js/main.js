@@ -8,7 +8,10 @@ import {
   LEFT_EYE_OUTER,
   LEFT_EYE_TOP,
   LEFT_IRIS_CENTER,
+  RIGHT_EYE_BOTTOM,
+  RIGHT_EYE_INNER,
   RIGHT_EYE_OUTER,
+  RIGHT_EYE_TOP,
   RIGHT_IRIS_CENTER,
   BlinkSequenceDetector,
   computeGazeX,
@@ -16,7 +19,7 @@ import {
   eyeAspectRatio,
   gazeToTurn,
   squintSpeedMultiplier,
-} from "./logic.js?v=9";
+} from "./logic.js?v=12";
 
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
@@ -202,9 +205,11 @@ function applyCoverTransform(videoW, videoH) {
   overlayCtx.setTransform(drawW / boxW, 0, 0, drawH / boxH, offsetX, offsetY);
 }
 
-// Only draws the landmarks the gaze/blink math in logic.js actually reads
-// (eye corners + lids used for gaze_x/gaze_y/EAR, iris centers used for
-// gaze direction) -- not a full face mesh, since the rest isn't load-bearing.
+// Mostly the landmarks the gaze/blink math in logic.js actually reads (eye
+// corners + lids used for gaze_x/gaze_y/EAR, iris centers used for gaze
+// direction) -- not a full face mesh. The right eye's top/bottom lid points
+// aren't read by the math (only the left eye feeds EAR/gaze_y) but are
+// included here purely so both eyes look symmetric instead of lopsided.
 function drawFaceOverlay(faceLandmarksList, videoW, videoH) {
   overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
   if (!overlayCanvas.width || !overlayCanvas.height) return;
@@ -214,15 +219,18 @@ function drawFaceOverlay(faceLandmarksList, videoW, videoH) {
   applyCoverTransform(videoW, videoH);
 
   for (const landmarks of faceLandmarksList) {
-    drawKeypoint(landmarks[LEFT_EYE_OUTER], "#30ff30", 3);
-    drawKeypoint(landmarks[LEFT_EYE_INNER], "#30ff30", 3);
-    drawKeypoint(landmarks[LEFT_EYE_TOP], "#30ff30", 3);
-    drawKeypoint(landmarks[LEFT_EYE_BOTTOM], "#30ff30", 3);
-    drawKeypoint(landmarks[RIGHT_EYE_OUTER], "#30ff30", 3);
+    drawKeypoint(landmarks[LEFT_EYE_OUTER], "#30ff30", 2);
+    drawKeypoint(landmarks[LEFT_EYE_INNER], "#30ff30", 2);
+    drawKeypoint(landmarks[LEFT_EYE_TOP], "#30ff30", 2);
+    drawKeypoint(landmarks[LEFT_EYE_BOTTOM], "#30ff30", 2);
+    drawKeypoint(landmarks[RIGHT_EYE_OUTER], "#30ff30", 2);
+    drawKeypoint(landmarks[RIGHT_EYE_INNER], "#30ff30", 2);
+    drawKeypoint(landmarks[RIGHT_EYE_TOP], "#30ff30", 2);
+    drawKeypoint(landmarks[RIGHT_EYE_BOTTOM], "#30ff30", 2);
 
-    // iris centers, drawn larger -- these directly drive steering
-    drawKeypoint(landmarks[LEFT_IRIS_CENTER], "#ff4d4d", 5);
-    drawKeypoint(landmarks[RIGHT_IRIS_CENTER], "#ff4d4d", 5);
+    // iris centers, drawn a bit larger -- these directly drive steering
+    drawKeypoint(landmarks[LEFT_IRIS_CENTER], "#ff4d4d", 3.5);
+    drawKeypoint(landmarks[RIGHT_IRIS_CENTER], "#ff4d4d", 3.5);
   }
 
   overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
