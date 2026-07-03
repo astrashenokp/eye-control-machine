@@ -13,14 +13,14 @@ import {
   computeGazeY,
   eyeAspectRatio,
   gazeToTurn,
-} from "./logic.js?v=6";
+} from "./logic.js?v=7";
 
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 
 const SPEED_SCALE = 6.0; // world units per second while driving
-const TURN_RATE = 4.5; // radians per second at turn=1.0 -- fast enough that heading "snaps" toward gaze
+const TURN_RATE = 7.0; // radians per second at turn=1.0 -- fast enough that heading "snaps" toward gaze
 
 // ---------- Three.js scene ----------
 
