@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { DrawingUtils, FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import {
+  EAR_BASELINE_DECAY,
+  EAR_THRESHOLD,
   LEFT_EYE_BOTTOM,
   LEFT_EYE_INNER,
   LEFT_EYE_OUTER,
@@ -13,7 +15,8 @@ import {
   computeGazeY,
   eyeAspectRatio,
   gazeToTurn,
-} from "./logic.js?v=8";
+  squintSpeedMultiplier,
+} from "./logic.js?v=9";
 
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
@@ -102,22 +105,26 @@ scene.add(car);
 //   returns to manual.
 // - "stopped": 3 blinks, from any mode. Frozen in place. 2 blinks resumes
 //   in manual.
+//
+// Independent of mode: squinting (narrowing the eyes short of a full
+// blink) speeds the car up, see squintSpeedMultiplier in logic.js.
 
 let heading = 0; // radians
 let mode = "manual"; // "manual" | "autopilot" | "stopped"
 let estopFlashUntilMs = 0;
+let openEarBaseline = EAR_THRESHOLD; // adapts up to the eye's actual "wide open" EAR, see squintSpeedMultiplier
 
 function forwardVector() {
   return new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, heading, 0));
 }
 
-function updateVehicle(turn, dt, noFace) {
+function updateVehicle(turn, speedMult, dt, noFace) {
   if (mode === "manual" && !noFace) {
     heading += turn * TURN_RATE * dt;
   }
   car.rotation.y = heading;
   const fwd = forwardVector();
-  const forwardSpeed = mode === "stopped" || noFace ? 0 : SPEED_SCALE;
+  const forwardSpeed = mode === "stopped" || noFace ? 0 : SPEED_SCALE * speedMult;
   car.position.addScaledVector(fwd, forwardSpeed * dt);
 
   const camOffset = fwd.clone().multiplyScalar(-6).add(new THREE.Vector3(0, 3.2, 0));
@@ -139,7 +146,7 @@ function describeCommand(turn) {
   return "MANUAL: FORWARD";
 }
 
-function updateHud({ gazeX, gazeY, turn, noFace }, nowMs) {
+function updateHud({ gazeX, gazeY, turn, speedMult, noFace }, nowMs) {
   const flashingStop = nowMs < estopFlashUntilMs;
   hud.classList.toggle("estop", flashingStop || mode === "stopped");
   hud.classList.toggle("no-face", noFace);
@@ -152,7 +159,7 @@ function updateHud({ gazeX, gazeY, turn, noFace }, nowMs) {
     return;
   }
 
-  hudLine1.textContent = `gaze_x=${gazeX.toFixed(2)} gaze_y=${gazeY.toFixed(2)}`;
+  hudLine1.textContent = `gaze_x=${gazeX.toFixed(2)} gaze_y=${gazeY.toFixed(2)} speed=${speedMult.toFixed(1)}x`;
   const label = flashingStop ? "EMERGENCY STOP (3 моргання)" : describeCommand(turn);
   hudLine2.textContent = `command: ${label}`;
 }
@@ -277,6 +284,7 @@ function processFrame(nowMs) {
   lastFrameTime = nowMs;
 
   let turn = 0;
+  let speedMult = 1.0;
   let gazeX = 0.5;
   let gazeY = 0.5;
   let noFace = true;
@@ -295,6 +303,9 @@ function processFrame(nowMs) {
       turn = gazeToTurn(gazeX);
 
       const ear = eyeAspectRatio(lm[LEFT_EYE_TOP].y, lm[LEFT_EYE_BOTTOM].y, lm[LEFT_EYE_OUTER].x, lm[LEFT_EYE_INNER].x);
+      openEarBaseline = Math.max(ear, openEarBaseline * EAR_BASELINE_DECAY);
+      speedMult = squintSpeedMultiplier(ear, openEarBaseline);
+
       const blinkCount = blinkDetector.update(ear, timestampMs / 1000);
       if (blinkCount === 2) {
         mode = mode === "autopilot" ? "manual" : "autopilot";
@@ -307,8 +318,8 @@ function processFrame(nowMs) {
     }
   }
 
-  updateVehicle(turn, dt, noFace);
-  updateHud({ gazeX, gazeY, turn, noFace }, nowMs);
+  updateVehicle(turn, speedMult, dt, noFace);
+  updateHud({ gazeX, gazeY, turn, speedMult, noFace }, nowMs);
 
   requestAnimationFrame(processFrame);
   renderer.render(scene, camera);
