@@ -21,8 +21,8 @@ export const GAZE_FORWARD_SPEED = 0.15;
 // Python defaults (0.15 / 0.8) so a small eye movement is enough to reach
 // full turn -- you should never have to turn your head far enough to lose
 // sight of the screen.
-export const GAZE_TURN_ZONE = 0.008;
-export const GAZE_TURN_GAIN = 6.0;
+export const GAZE_TURN_ZONE = 0.004;
+export const GAZE_TURN_GAIN = 9.0;
 export const GAZE_MIN_EYE_SPAN = 0.01; // below this, eye-corner landmarks are too close to trust
 export const GAZE_TURN_MAX = 1.0; // hard clamp -- never return an unbounded turn command
 
