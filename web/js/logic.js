@@ -32,15 +32,14 @@ export const GAZE_MIN_EYE_SPAN = 0.01; // below this, eye-corner landmarks are t
 export const GAZE_TURN_MAX = 1.0; // hard clamp -- never return an unbounded turn command
 
 export const EAR_THRESHOLD = 0.2;
-// Squinting (narrowing the eyes without a full blink) speeds the car up,
-// up to this multiplier right at the edge of the blink threshold.
-export const EAR_SQUINT_MAX_SPEED_MULT = 3.0;
-// How fast the "fully open" EAR baseline relaxes back down when the eyes
-// stay narrower for a while (per-frame decay, applied every processFrame
-// tick) -- snaps up instantly on a wider-open frame, decays slowly
-// otherwise, so the squint mapping adapts to each face/camera distance
-// without needing a fixed reference value.
-export const EAR_BASELINE_DECAY = 0.995;
+// Squinting (narrowing the eyes without a full blink) controls speed, from
+// SPEED_AT_OPEN_EYES (eyes calibrated wide open) up to SPEED_AT_SQUINT_EYES
+// (eyes calibrated as narrow as possible while the pupil is still
+// detected). See squintSpeedMultiplier -- the app runs a two-step
+// calibration at startup to find each person's actual EAR range instead of
+// assuming a fixed one.
+export const SPEED_AT_OPEN_EYES = 0.5;
+export const SPEED_AT_SQUINT_EYES = 3.0;
 // How long to wait after the last blink before deciding how many blinks
 // were in the sequence. Short enough to feel responsive, long enough that
 // two deliberate blinks don't get split into two separate single-blinks.
@@ -83,14 +82,15 @@ export function eyeAspectRatio(topY, bottomY, leftX, rightX) {
   return height / (width + 1e-6);
 }
 
-// Maps how narrowed the eye is (relative to its own recent "fully open"
-// EAR) to a speed multiplier: 1.0 with eyes wide open, up to
-// EAR_SQUINT_MAX_SPEED_MULT right at the edge of a blink. `openBaselineEar`
-// is a per-session running "fully open" reference -- see EAR_BASELINE_DECAY.
-export function squintSpeedMultiplier(ear, openBaselineEar) {
-  if (openBaselineEar <= EAR_THRESHOLD) return 1.0;
-  const squintFraction = Math.max(0, Math.min(1, (openBaselineEar - ear) / (openBaselineEar - EAR_THRESHOLD)));
-  return 1.0 + squintFraction * (EAR_SQUINT_MAX_SPEED_MULT - 1.0);
+// Maps the current EAR to a speed multiplier using the two calibrated
+// reference points from startup: SPEED_AT_OPEN_EYES at `earOpen`, ramping
+// up to SPEED_AT_SQUINT_EYES at `earSquint`. Values outside that range
+// clamp to the nearer endpoint (e.g. blinking briefly doesn't spike speed
+// past the calibrated squint max).
+export function squintSpeedMultiplier(ear, earOpen, earSquint) {
+  if (earOpen <= earSquint) return SPEED_AT_OPEN_EYES; // degenerate calibration guard
+  const squintFraction = Math.max(0, Math.min(1, (earOpen - ear) / (earOpen - earSquint)));
+  return SPEED_AT_OPEN_EYES + squintFraction * (SPEED_AT_SQUINT_EYES - SPEED_AT_OPEN_EYES);
 }
 
 // Counts BLINK EVENTS (open->closed transitions) into a sequence, and
