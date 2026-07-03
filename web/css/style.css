@@ -1,0 +1,79 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #111318;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+#scene-container {
+  position: absolute;
+  inset: 0;
+}
+
+#scene-container canvas {
+  display: block;
+}
+
+#webcam {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 220px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  transform: scaleX(-1); /* mirror, feels natural like a selfie cam */
+  z-index: 10;
+}
+
+#hud {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  color: #e8f0ff;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  z-index: 10;
+  pointer-events: none;
+}
+
+#hud-line2 {
+  font-weight: 600;
+  color: #ffcf6b;
+}
+
+#hud.estop #hud-line2 {
+  color: #ff5a5a;
+}
+
+#hud.no-face #hud-line2 {
+  color: #ff5a5a;
+}
+
+#start-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  padding: 14px 22px;
+  font-size: 16px;
+  border-radius: 10px;
+  border: none;
+  background: #3b82f6;
+  color: white;
+  cursor: pointer;
+}
+
+#start-btn:hover {
+  background: #2f6fd6;
+}
+
+#start-btn.hidden {
+  display: none;
+}
