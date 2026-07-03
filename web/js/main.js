@@ -26,7 +26,8 @@ const MODEL_URL =
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 
 const SPEED_SCALE = 6.0; // world units per second while driving
-const TURN_RATE = 7.0; // radians per second at turn=1.0 -- fast enough that heading "snaps" toward gaze
+const TURN_RATE = 3.2; // radians per second at turn=1.0 -- responsive without spinning in place
+const TURN_RATE_SPEED_CAP = 1.8; // cap how much squint-speed can further multiply turn rate
 
 // ---------- Three.js scene ----------
 
@@ -125,7 +126,7 @@ function forwardVector() {
 
 function updateVehicle(turn, speedMult, dt, noFace) {
   if (mode === "manual" && !noFace) {
-    heading += turn * TURN_RATE * speedMult * dt;
+    heading += turn * TURN_RATE * Math.min(speedMult, TURN_RATE_SPEED_CAP) * dt;
   }
   car.rotation.y = heading;
   const fwd = forwardVector();
