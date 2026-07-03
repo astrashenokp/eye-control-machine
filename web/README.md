@@ -23,10 +23,12 @@ python -m http.server 8000
 Then open http://localhost:8000 and click the button to grant camera
 access.
 
-- **2 blinks** — start driving forward
-- **3 blinks** — emergency stop
-- **Look left/right** — steer while driving (has no effect while parked, so
-  you can freely look around without accidentally moving the car)
+- **Manual (default)** — the car always drives, and heading follows your
+  gaze directly: look left/right and it turns that way
+- **2 blinks** — lock into autopilot: the car keeps driving straight on its
+  own, ignoring gaze, so you can look around freely. 2 blinks again returns
+  to manual.
+- **3 blinks** — emergency stop, from any mode. 2 blinks resumes in manual.
 
 ## Next step: the real thing
 
