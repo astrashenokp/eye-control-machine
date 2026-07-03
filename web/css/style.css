@@ -164,3 +164,46 @@ html, body {
 #start-btn.hidden {
   display: none;
 }
+
+#calibration {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 28px;
+  border-radius: 12px;
+  background: rgba(15, 17, 23, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+#calibration-text {
+  color: #e8f0ff;
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+  max-width: 360px;
+}
+
+#calibration-btn {
+  padding: 12px 24px;
+  font-size: 16px;
+  border-radius: 10px;
+  border: none;
+  background: #30ff63;
+  color: #0f1117;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#calibration-btn:hover {
+  background: #26d451;
+}
+
+#calibration.hidden {
+  display: none;
+}
