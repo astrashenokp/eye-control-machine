@@ -29,6 +29,8 @@ access.
   own, ignoring gaze, so you can look around freely. 2 blinks again returns
   to manual.
 - **3 blinks** — emergency stop, from any mode. 2 blinks resumes in manual.
+- **Squint** (narrow your eyes short of a full blink) — speeds the car up,
+  the narrower the faster
 
 ## Next step: the real thing
 
