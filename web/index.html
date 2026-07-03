@@ -15,19 +15,23 @@
   </script>
 </head>
 <body>
-  <div id="scene-container"></div>
-
-  <div id="face-cam-wrap">
-    <div id="face-cam-label">скан обличчя</div>
+  <div id="app">
     <div id="face-cam">
-      <video id="webcam" autoplay playsinline muted></video>
-      <canvas id="face-overlay"></canvas>
+      <div id="face-cam-inner">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="face-overlay"></canvas>
+      </div>
+      <div id="face-cam-label">скан обличчя</div>
     </div>
-  </div>
 
-  <div id="hud">
-    <div id="hud-line1">gaze_x=-- gaze_y=--</div>
-    <div id="hud-line2">command: --</div>
+    <div id="divider"></div>
+
+    <div id="scene-container">
+      <div id="hud">
+        <div id="hud-line1">gaze_x=-- gaze_y=--</div>
+        <div id="hud-line2">command: --</div>
+      </div>
+    </div>
   </div>
 
   <button id="start-btn">Увімкнути камеру й керування очима</button>
