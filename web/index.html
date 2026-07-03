@@ -17,7 +17,13 @@
 <body>
   <div id="scene-container"></div>
 
-  <video id="webcam" autoplay playsinline muted></video>
+  <div id="face-cam-wrap">
+    <div id="face-cam-label">скан обличчя</div>
+    <div id="face-cam">
+      <video id="webcam" autoplay playsinline muted></video>
+      <canvas id="face-overlay"></canvas>
+    </div>
+  </div>
 
   <div id="hud">
     <div id="hud-line1">gaze_x=-- gaze_y=--</div>
