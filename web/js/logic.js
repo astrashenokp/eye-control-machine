@@ -21,12 +21,21 @@ export const GAZE_FORWARD_SPEED = 0.15;
 // Python defaults (0.15 / 0.8) so a full eye-only movement (without
 // turning your head) is enough to reach full turn, while smaller
 // movements still produce proportionally smaller turns.
-export const GAZE_TURN_ZONE = 0.01;
-export const GAZE_TURN_GAIN = 4.0;
+export const GAZE_TURN_ZONE = 0.003;
+export const GAZE_TURN_GAIN = 6.0;
 export const GAZE_MIN_EYE_SPAN = 0.01; // below this, eye-corner landmarks are too close to trust
 export const GAZE_TURN_MAX = 1.0; // hard clamp -- never return an unbounded turn command
 
 export const EAR_THRESHOLD = 0.2;
+// Squinting (narrowing the eyes without a full blink) speeds the car up,
+// up to this multiplier right at the edge of the blink threshold.
+export const EAR_SQUINT_MAX_SPEED_MULT = 3.0;
+// How fast the "fully open" EAR baseline relaxes back down when the eyes
+// stay narrower for a while (per-frame decay, applied every processFrame
+// tick) -- snaps up instantly on a wider-open frame, decays slowly
+// otherwise, so the squint mapping adapts to each face/camera distance
+// without needing a fixed reference value.
+export const EAR_BASELINE_DECAY = 0.995;
 // How long to wait after the last blink before deciding how many blinks
 // were in the sequence. Short enough to feel responsive, long enough that
 // two deliberate blinks don't get split into two separate single-blinks.
@@ -67,6 +76,16 @@ export function eyeAspectRatio(topY, bottomY, leftX, rightX) {
   const height = Math.abs(topY - bottomY);
   const width = Math.abs(rightX - leftX);
   return height / (width + 1e-6);
+}
+
+// Maps how narrowed the eye is (relative to its own recent "fully open"
+// EAR) to a speed multiplier: 1.0 with eyes wide open, up to
+// EAR_SQUINT_MAX_SPEED_MULT right at the edge of a blink. `openBaselineEar`
+// is a per-session running "fully open" reference -- see EAR_BASELINE_DECAY.
+export function squintSpeedMultiplier(ear, openBaselineEar) {
+  if (openBaselineEar <= EAR_THRESHOLD) return 1.0;
+  const squintFraction = Math.max(0, Math.min(1, (openBaselineEar - ear) / (openBaselineEar - EAR_THRESHOLD)));
+  return 1.0 + squintFraction * (EAR_SQUINT_MAX_SPEED_MULT - 1.0);
 }
 
 // Counts BLINK EVENTS (open->closed transitions) into a sequence, and
