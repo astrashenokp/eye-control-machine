@@ -1,0 +1,234 @@
+import * as THREE from "three";
+import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import {
+  LEFT_EYE_BOTTOM,
+  LEFT_EYE_INNER,
+  LEFT_EYE_OUTER,
+  LEFT_EYE_TOP,
+  LEFT_IRIS_CENTER,
+  RIGHT_EYE_OUTER,
+  RIGHT_IRIS_CENTER,
+  DoubleBlinkDetector,
+  computeGazeX,
+  computeGazeY,
+  eyeAspectRatio,
+  gazeToCommand,
+} from "./logic.js";
+
+const MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
+const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
+
+const SPEED_SCALE = 6.0; // world units per second at forward=GAZE_FORWARD_SPEED
+const TURN_RATE = 2.2; // radians per second at turn=1.0
+
+// ---------- Three.js scene ----------
+
+const container = document.getElementById("scene-container");
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1b1f2a);
+scene.fog = new THREE.Fog(0x1b1f2a, 20, 70);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+container.appendChild(renderer.domElement);
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+const hemiLight = new THREE.HemisphereLight(0xbfd9ff, 0x2a2a2a, 1.1);
+scene.add(hemiLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+dirLight.position.set(8, 12, 6);
+scene.add(dirLight);
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(300, 300),
+  new THREE.MeshStandardMaterial({ color: 0x2a2f3a })
+);
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(300, 60, 0x4a5468, 0x36404f);
+scene.add(grid);
+
+// ---- vehicle: simple low-poly car so heading is obvious ----
+const car = new THREE.Group();
+
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6 });
+const body = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 2.4), bodyMat);
+body.position.y = 0.45;
+car.add(body);
+
+const roof = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.4, 1.2), bodyMat);
+roof.position.set(0, 0.9, -0.1);
+car.add(roof);
+
+const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffee88 });
+for (const x of [-0.5, 0.5]) {
+  const headlight = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 12), headlightMat);
+  headlight.position.set(x, 0.45, -1.25);
+  car.add(headlight);
+}
+
+const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 16);
+for (const x of [-0.75, 0.75]) {
+  for (const z of [-0.8, 0.8]) {
+    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x, 0.35, z);
+    car.add(wheel);
+  }
+}
+
+scene.add(car);
+
+// ---------- vehicle state ----------
+
+let heading = 0; // radians
+let emergencyStopped = false;
+
+function forwardVector() {
+  return new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, heading, 0));
+}
+
+function updateVehicle(command, dt) {
+  const effectiveForward = emergencyStopped ? 0 : command.forward;
+  const effectiveTurn = emergencyStopped ? 0 : command.turn;
+  heading += effectiveTurn * TURN_RATE * dt;
+  car.rotation.y = heading;
+  const fwd = forwardVector();
+  car.position.addScaledVector(fwd, (effectiveForward / 0.15) * SPEED_SCALE * dt);
+
+  const camOffset = fwd.clone().multiplyScalar(-6).add(new THREE.Vector3(0, 3.2, 0));
+  camera.position.lerp(car.position.clone().add(camOffset), 0.08);
+  camera.lookAt(car.position.x, car.position.y + 0.6, car.position.z);
+}
+
+// ---------- HUD ----------
+
+const hud = document.getElementById("hud");
+const hudLine1 = document.getElementById("hud-line1");
+const hudLine2 = document.getElementById("hud-line2");
+
+function describeCommand(command) {
+  const base = command.forward > 0 ? "FORWARD" : "STOP";
+  if (command.turn > 0.05) return `${base} + LEFT`;
+  if (command.turn < -0.05) return `${base} + RIGHT`;
+  return base;
+}
+
+function updateHud({ gazeX, gazeY, command, estop, noFace }) {
+  hud.classList.toggle("estop", emergencyStopped);
+  hud.classList.toggle("no-face", noFace);
+
+  if (noFace) {
+    hudLine1.textContent = "обличчя не знайдено";
+    hudLine2.textContent = "command: NO FACE - STOP";
+    return;
+  }
+
+  hudLine1.textContent = `gaze_x=${gazeX.toFixed(2)} gaze_y=${gazeY.toFixed(2)}`;
+  const label = emergencyStopped ? "EMERGENCY STOP (подвійне моргання -> відновити)" : describeCommand(command);
+  hudLine2.textContent = `command: ${label}`;
+}
+
+// ---------- webcam + MediaPipe ----------
+
+const video = document.getElementById("webcam");
+const startBtn = document.getElementById("start-btn");
+
+const blinkDetector = new DoubleBlinkDetector();
+let landmarker = null;
+let startTimeMs = 0;
+let lastFrameTime = performance.now();
+
+async function setupLandmarker() {
+  const filesetResolver = await FilesetResolver.forVisionTasks(WASM_URL);
+  landmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+    baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
+    runningMode: "VIDEO",
+    numFaces: 1,
+    minFaceDetectionConfidence: 0.7,
+  });
+}
+
+async function setupWebcam() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { width: 640, height: 480 },
+    audio: false,
+  });
+  video.srcObject = stream;
+  await new Promise((resolve) => {
+    video.onloadedmetadata = () => resolve();
+  });
+  video.play();
+}
+
+function processFrame(nowMs) {
+  const dt = Math.min((nowMs - lastFrameTime) / 1000, 0.1);
+  lastFrameTime = nowMs;
+
+  let command = { forward: 0, turn: 0 };
+  let gazeX = 0.5;
+  let gazeY = 0.5;
+  let estop = false;
+  let noFace = true;
+
+  if (landmarker && video.readyState >= 2) {
+    const timestampMs = nowMs - startTimeMs;
+    const result = landmarker.detectForVideo(video, timestampMs);
+
+    if (result.faceLandmarks && result.faceLandmarks.length > 0) {
+      noFace = false;
+      const lm = result.faceLandmarks[0];
+
+      gazeX = computeGazeX(lm[LEFT_IRIS_CENTER].x, lm[RIGHT_IRIS_CENTER].x, lm[LEFT_EYE_OUTER].x, lm[RIGHT_EYE_OUTER].x);
+      gazeY = computeGazeY(lm[LEFT_IRIS_CENTER].y, lm[LEFT_EYE_TOP].y, lm[LEFT_EYE_BOTTOM].y);
+      command = gazeToCommand(gazeX);
+
+      const ear = eyeAspectRatio(lm[LEFT_EYE_TOP].y, lm[LEFT_EYE_BOTTOM].y, lm[LEFT_EYE_OUTER].x, lm[LEFT_EYE_INNER].x);
+      estop = blinkDetector.update(ear, timestampMs / 1000);
+      if (estop) {
+        emergencyStopped = !emergencyStopped;
+      }
+    } else {
+      blinkDetector.reset();
+    }
+  }
+
+  updateVehicle(command, dt);
+  updateHud({ gazeX, gazeY, command, estop, noFace });
+
+  requestAnimationFrame(processFrame);
+  renderer.render(scene, camera);
+}
+
+startBtn.addEventListener("click", async () => {
+  startBtn.textContent = "Завантаження моделі...";
+  startBtn.disabled = true;
+  try {
+    await Promise.all([setupWebcam(), setupLandmarker()]);
+    startTimeMs = performance.now();
+    lastFrameTime = startTimeMs;
+    startBtn.classList.add("hidden");
+    requestAnimationFrame(processFrame);
+  } catch (err) {
+    console.error(err);
+    startBtn.textContent = "Помилка. Перевір дозвіл на камеру і спробуй ще раз.";
+    startBtn.disabled = false;
+  }
+});
+
+// render an idle frame so the scene isn't blank before the user hits start
+renderer.render(scene, camera);
+camera.position.set(0, 4, 8);
+camera.lookAt(0, 0, 0);
+renderer.render(scene, camera);
