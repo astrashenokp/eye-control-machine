@@ -1,5 +1,9 @@
-// Pure gaze-to-command math. 1:1 port of ../../src/eye_control/logic.py --
-// keep both in sync if the math ever changes. No DOM/MediaPipe imports here.
+// Gaze-to-command math. Started as a 1:1 port of
+// ../../src/eye_control/logic.py, but the web control scheme has since
+// diverged on purpose: driving here is blink-triggered (2 blinks = go, 3
+// blinks = stop) instead of tied to staring straight ahead, so looking
+// around doesn't fight with driving. Turn sensitivity is also tuned higher
+// than the Python defaults. See ../README.md.
 
 // Landmark indices (MediaPipe FaceLandmarker, 478-point mesh incl. iris).
 export const LEFT_EYE_OUTER = 33;
@@ -12,15 +16,20 @@ export const LEFT_EYE_TOP = 159;
 export const LEFT_EYE_BOTTOM = 145;
 
 export const GAZE_FORWARD_SPEED = 0.15;
-export const GAZE_CENTER_DEAD_ZONE = 0.1;
-export const GAZE_TURN_ZONE = 0.15;
-export const GAZE_TURN_GAIN = 0.8;
+// Web-tuned turn sensitivity: much lower dead zone and higher gain than the
+// Python defaults (0.15 / 0.8) so a small eye movement is enough to reach
+// full turn -- you should never have to turn your head far enough to lose
+// sight of the screen.
+export const GAZE_TURN_ZONE = 0.03;
+export const GAZE_TURN_GAIN = 3.0;
 export const GAZE_MIN_EYE_SPAN = 0.01; // below this, eye-corner landmarks are too close to trust
 export const GAZE_TURN_MAX = 1.0; // hard clamp -- never return an unbounded turn command
 
 export const EAR_THRESHOLD = 0.2;
-export const DOUBLE_BLINK_COUNT = 2;
-export const DOUBLE_BLINK_MAX_GAP_SEC = 1.0;
+// How long to wait after the last blink before deciding how many blinks
+// were in the sequence. Short enough to feel responsive, long enough that
+// two deliberate blinks don't get split into two separate single-blinks.
+export const BLINK_SEQUENCE_GAP_SEC = 0.45;
 
 // 0 = looking full left, 1 = looking full right, 0.5 = center.
 export function computeGazeX(irisLeftX, irisRightX, eyeLeftX, eyeRightX) {
@@ -37,12 +46,13 @@ export function computeGazeY(irisY, eyeTopY, eyeBottomY) {
   return (irisY - eyeTopY) / span;
 }
 
-export function gazeToCommand(gazeX) {
+// Only the turn component is used by the web app -- forward motion is
+// blink-triggered (see BlinkSequenceDetector), not gaze-triggered.
+export function gazeToTurn(gazeX) {
   const gazeCenterDist = Math.abs(gazeX - 0.5);
-  const forward = gazeCenterDist < GAZE_CENTER_DEAD_ZONE ? GAZE_FORWARD_SPEED : 0.0;
   let turn = gazeCenterDist > GAZE_TURN_ZONE ? (0.5 - gazeX) * GAZE_TURN_GAIN : 0.0;
   turn = Math.max(-GAZE_TURN_MAX, Math.min(GAZE_TURN_MAX, turn));
-  return { forward, turn };
+  return turn;
 }
 
 export function eyeAspectRatio(topY, bottomY, leftX, rightX) {
@@ -51,52 +61,47 @@ export function eyeAspectRatio(topY, bottomY, leftX, rightX) {
   return height / (width + 1e-6);
 }
 
-// Counts BLINK EVENTS (open->closed transitions), not closed-eye frames.
-export class DoubleBlinkDetector {
-  constructor(
-    earThreshold = EAR_THRESHOLD,
-    requiredBlinks = DOUBLE_BLINK_COUNT,
-    maxGapSec = DOUBLE_BLINK_MAX_GAP_SEC
-  ) {
+// Counts BLINK EVENTS (open->closed transitions) into a sequence, and
+// reports the total once `gapTimeoutSec` passes since the last blink --
+// e.g. blink-blink-<pause> resolves to 2, blink-blink-blink-<pause> to 3.
+// Distinguishing "2" from "3" needs that pause, so there's an inherent
+// ~gapTimeoutSec delay before a sequence is reported.
+export class BlinkSequenceDetector {
+  constructor(earThreshold = EAR_THRESHOLD, gapTimeoutSec = BLINK_SEQUENCE_GAP_SEC) {
     this.earThreshold = earThreshold;
-    this.requiredBlinks = requiredBlinks;
-    this.maxGapSec = maxGapSec;
+    this.gapTimeoutSec = gapTimeoutSec;
     this.blinkCount = 0;
-    this.firstBlinkTime = null;
+    this.lastBlinkTime = null;
     this.wasClosed = false;
   }
 
   // Clear any in-progress blink sequence. Call whenever face tracking is
   // lost -- otherwise a blink right before a tracking gap and an unrelated
-  // blink right after tracking resumes can combine into a false trigger.
+  // blink right after tracking resumes can combine into a false sequence.
   reset() {
     this.blinkCount = 0;
-    this.firstBlinkTime = null;
+    this.lastBlinkTime = null;
     this.wasClosed = false;
   }
 
-  // Returns true exactly once when `requiredBlinks` blinks complete within
-  // `maxGapSec` of the first one.
+  // Returns the finalized blink count (>=1) once a pause follows a
+  // sequence, otherwise null (sequence still in progress, or no blinks).
   update(ear, nowSec) {
     const isClosed = ear < this.earThreshold;
-    let triggered = false;
+    let finalizedCount = null;
+
+    if (this.blinkCount > 0 && this.lastBlinkTime !== null && nowSec - this.lastBlinkTime > this.gapTimeoutSec) {
+      finalizedCount = this.blinkCount;
+      this.blinkCount = 0;
+      this.lastBlinkTime = null;
+    }
 
     if (isClosed && !this.wasClosed) {
-      if (this.blinkCount > 0 && nowSec - this.firstBlinkTime > this.maxGapSec) {
-        this.blinkCount = 0;
-      }
-      if (this.blinkCount === 0) {
-        this.firstBlinkTime = nowSec;
-      }
       this.blinkCount += 1;
-      if (this.blinkCount >= this.requiredBlinks) {
-        triggered = true;
-        this.blinkCount = 0;
-        this.firstBlinkTime = null;
-      }
+      this.lastBlinkTime = nowSec;
     }
 
     this.wasClosed = isClosed;
-    return triggered;
+    return finalizedCount;
   }
 }
