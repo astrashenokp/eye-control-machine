@@ -15,6 +15,11 @@ export const LEFT_IRIS_CENTER = 468;
 export const RIGHT_IRIS_CENTER = 473;
 export const LEFT_EYE_TOP = 159;
 export const LEFT_EYE_BOTTOM = 145;
+// Right-eye counterparts to LEFT_EYE_TOP/BOTTOM -- not read by any of the
+// math below (only the left eye feeds gaze_y/EAR), but used by main.js to
+// draw a symmetric pair of eye markers instead of a lopsided one.
+export const RIGHT_EYE_TOP = 386;
+export const RIGHT_EYE_BOTTOM = 374;
 
 export const GAZE_FORWARD_SPEED = 0.15;
 // Web-tuned turn sensitivity: lower dead zone and higher gain than the
