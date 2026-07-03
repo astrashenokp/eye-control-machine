@@ -1,9 +1,10 @@
 // Gaze-to-command math. Started as a 1:1 port of
 // ../../src/eye_control/logic.py, but the web control scheme has since
-// diverged on purpose: driving here is blink-triggered (2 blinks = go, 3
-// blinks = stop) instead of tied to staring straight ahead, so looking
-// around doesn't fight with driving. Turn sensitivity is also tuned higher
-// than the Python defaults. See ../README.md.
+// diverged on purpose: the car always drives where you look (manual mode),
+// 2 blinks locks into a straight-line autopilot so you can look around
+// freely, and 3 blinks is an emergency stop -- see main.js and
+// ../README.md. Turn sensitivity is also tuned much higher than the
+// Python defaults, for a "look there, go there" feel.
 
 // Landmark indices (MediaPipe FaceLandmarker, 478-point mesh incl. iris).
 export const LEFT_EYE_OUTER = 33;
@@ -20,8 +21,8 @@ export const GAZE_FORWARD_SPEED = 0.15;
 // Python defaults (0.15 / 0.8) so a small eye movement is enough to reach
 // full turn -- you should never have to turn your head far enough to lose
 // sight of the screen.
-export const GAZE_TURN_ZONE = 0.015;
-export const GAZE_TURN_GAIN = 4.5;
+export const GAZE_TURN_ZONE = 0.008;
+export const GAZE_TURN_GAIN = 6.0;
 export const GAZE_MIN_EYE_SPAN = 0.01; // below this, eye-corner landmarks are too close to trust
 export const GAZE_TURN_MAX = 1.0; // hard clamp -- never return an unbounded turn command
 
