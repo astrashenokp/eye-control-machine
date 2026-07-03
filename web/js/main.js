@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { DrawingUtils, FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import {
   EAR_BASELINE_DECAY,
   EAR_THRESHOLD,
@@ -170,11 +170,10 @@ const faceCamWrap = document.getElementById("face-cam");
 const faceCamLabel = document.getElementById("face-cam-label");
 const overlayCanvas = document.getElementById("face-overlay");
 const overlayCtx = overlayCanvas.getContext("2d");
-let drawingUtils = null;
 
-function drawPupil(landmark, color) {
+function drawKeypoint(landmark, color, radius) {
   overlayCtx.beginPath();
-  overlayCtx.arc(landmark.x * overlayCanvas.width, landmark.y * overlayCanvas.height, 3, 0, Math.PI * 2);
+  overlayCtx.arc(landmark.x * overlayCanvas.width, landmark.y * overlayCanvas.height, radius, 0, Math.PI * 2);
   overlayCtx.fillStyle = color;
   overlayCtx.fill();
   overlayCtx.lineWidth = 1;
@@ -189,9 +188,9 @@ function resizeOverlayCanvas() {
 
 // The <video> uses object-fit: cover (uniform scale + crop, no distortion),
 // but <canvas> has no object-fit -- so before drawing, replicate that same
-// crop as a 2D transform. DrawingUtils and drawPupil() both compute raw
-// coordinates as landmark * canvas.width/height; this transform maps that
-// convention onto the visible (cropped) video instead of the full frame.
+// crop as a 2D transform. drawKeypoint() computes raw coordinates as
+// landmark * canvas.width/height; this transform maps that convention onto
+// the visible (cropped) video instead of the full frame.
 function applyCoverTransform(videoW, videoH) {
   const boxW = overlayCanvas.width;
   const boxH = overlayCanvas.height;
@@ -203,39 +202,27 @@ function applyCoverTransform(videoW, videoH) {
   overlayCtx.setTransform(drawW / boxW, 0, 0, drawH / boxH, offsetX, offsetY);
 }
 
+// Only draws the landmarks the gaze/blink math in logic.js actually reads
+// (eye corners + lids used for gaze_x/gaze_y/EAR, iris centers used for
+// gaze direction) -- not a full face mesh, since the rest isn't load-bearing.
 function drawFaceOverlay(faceLandmarksList, videoW, videoH) {
   overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
   if (!overlayCanvas.width || !overlayCanvas.height) return;
   overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
   if (!faceLandmarksList || faceLandmarksList.length === 0) return;
 
-  if (!drawingUtils) drawingUtils = new DrawingUtils(overlayCtx);
   applyCoverTransform(videoW, videoH);
 
   for (const landmarks of faceLandmarksList) {
-    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, {
-      color: "#e8f0ff",
-      lineWidth: 1.5,
-    });
-    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, { color: "#30ff30", lineWidth: 2 });
-    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW, {
-      color: "#30ff30",
-      lineWidth: 1.5,
-    });
-    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, { color: "#30ff30", lineWidth: 2 });
-    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, {
-      color: "#30ff30",
-      lineWidth: 1.5,
-    });
-    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, { color: "#ffd23f", lineWidth: 2 });
-    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, {
-      color: "#ffd23f",
-      lineWidth: 2,
-    });
+    drawKeypoint(landmarks[LEFT_EYE_OUTER], "#30ff30", 3);
+    drawKeypoint(landmarks[LEFT_EYE_INNER], "#30ff30", 3);
+    drawKeypoint(landmarks[LEFT_EYE_TOP], "#30ff30", 3);
+    drawKeypoint(landmarks[LEFT_EYE_BOTTOM], "#30ff30", 3);
+    drawKeypoint(landmarks[RIGHT_EYE_OUTER], "#30ff30", 3);
 
-    // pupil centers, drawn extra large so they're unmistakable
-    drawPupil(landmarks[LEFT_IRIS_CENTER], "#ff4d4d");
-    drawPupil(landmarks[RIGHT_IRIS_CENTER], "#ff4d4d");
+    // iris centers, drawn larger -- these directly drive steering
+    drawKeypoint(landmarks[LEFT_IRIS_CENTER], "#ff4d4d", 5);
+    drawKeypoint(landmarks[RIGHT_IRIS_CENTER], "#ff4d4d", 5);
   }
 
   overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
