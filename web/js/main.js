@@ -110,7 +110,9 @@ scene.add(car);
 //   in manual.
 //
 // Independent of mode: squinting (narrowing the eyes short of a full
-// blink) speeds the car up, see squintSpeedMultiplier in logic.js.
+// blink) speeds the car up (see squintSpeedMultiplier in logic.js) and,
+// since a faster car needs a faster turn rate to stay agile, also scales
+// how fast heading can swing.
 
 let heading = 0; // radians
 let mode = "manual"; // "manual" | "autopilot" | "stopped"
@@ -123,7 +125,7 @@ function forwardVector() {
 
 function updateVehicle(turn, speedMult, dt, noFace) {
   if (mode === "manual" && !noFace) {
-    heading += turn * TURN_RATE * dt;
+    heading += turn * TURN_RATE * speedMult * dt;
   }
   car.rotation.y = heading;
   const fwd = forwardVector();
