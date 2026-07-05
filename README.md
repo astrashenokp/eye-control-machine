@@ -49,12 +49,21 @@ running in-browser (WASM) drives a Three.js car around a 3D scene, no Python
 required. See [`web/README.md`](web/README.md) to run it. This is the "drive
 a virtual model first" step before wiring up real hardware.
 
+## Hardware build
+
+[`hardware/`](hardware/) is the physical version: a 4WD chassis driven by
+an ESP32 over its own Wi-Fi access point (no cable to the laptop), plus an
+ESP32-CAM for a live view from the car. See
+[`hardware/README.md`](hardware/README.md) for the full wiring guide and
+[`hardware/firmware/`](hardware/firmware/) for the ESP32 firmware.
+
 ## Roadmap
 
 - [x] Software-only gaze -> command loop (this repo)
 - [x] Browser-based 3D model you can drive with your eyes (`web/`)
-- [ ] Send `DriveCommand` over serial to a microcontroller (ESP32/Arduino)
-      driving real motors on a small 2WD chassis
+- [x] Wiring guide + ESP32 firmware for a real 4WD chassis (`hardware/`)
+- [ ] Build it, then wire `web/js/main.js` to send `{forward, turn}` to the
+      car's Wi-Fi access point instead of (or alongside) the 3D model
 - [ ] Swap the webcam overlay for a physical status LED / buzzer for the
       emergency stop
 
